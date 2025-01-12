@@ -1,0 +1,207 @@
+#  https://levelup.gitconnected.com/kraft-kafka-cluster-with-docker-e79a97d19f2c
+services:
+  kafka1:
+    image: confluentinc/cp-kafka
+    container_name: kafka1
+    hostname: kafka1
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      CLUSTER_ID: 'lUmDoAevQdqJlGa3b-Ujjw'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka1:29092,CONTROLLER://kafka1:29093,EXTERNAL://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka1:29092,EXTERNAL://localhost:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29093,2@kafka2:29093,3@kafka3:29093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_LOG_DIRS: '/kafka-connect-source-reddit/data'
+    volumes:
+      - ./kafka-data/kafka1:/kafka-connect-source-reddit/data
+
+  kafka2:
+    image: confluentinc/cp-kafka
+    container_name: kafka2
+    hostname: kafka2
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 2
+      CLUSTER_ID: 'lUmDoAevQdqJlGa3b-Ujjw'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka2:29092,CONTROLLER://kafka2:29093,EXTERNAL://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka2:29092,EXTERNAL://localhost:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29093,2@kafka2:29093,3@kafka3:29093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_LOG_DIRS: '/kafka-connect-source-reddit/data'
+    volumes:
+      - ./kafka-data/kafka2:/kafka-connect-source-reddit/data
+
+  kafka3:
+    image: confluentinc/cp-kafka
+    container_name: kafka3
+    hostname: kafka3
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 3
+      CLUSTER_ID: 'lUmDoAevQdqJlGa3b-Ujjw'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka3:29092,CONTROLLER://kafka3:29093,EXTERNAL://0.0.0.0:9094'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka3:29092,EXTERNAL://localhost:9094'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29093,2@kafka2:29093,3@kafka3:29093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_LOG_DIRS: '/kafka-connect-source-reddit/data'
+    volumes:
+      - ./kafka-data/kafka3:/kafka-connect-source-reddit/data
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry
+    container_name: schema-registry
+    hostname: schema-registry
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      KAFKA_CLUSTERS_0_NAME: "kraft-cluster"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka1:29092,kafka2:29092,kafka3:29092'
+      SCHEMA_REGISTRY_LISTENERS: 'http://0.0.0.0:8081'
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC: "_schemas"
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 3
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_CLEANUP_POLICY: "compact"
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+
+  kafbat-ui:
+    image: kafbat/kafka-ui:latest
+    platform: linux/amd64
+    container_name: kafbat-ui
+    ports:
+      - "9000:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: "kraft-cluster"
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka1:29092,kafka2:29092,kafka3:29092"
+      KAFKA_CLUSTERS_0_SCHEMA_REGISTRY: "http://schema-registry:8081"
+      KAFKA_CLUSTERS_0_KAFKA_CONNECT_0_NAME: "reddit-source"
+      KAFKA_CLUSTERS_0_KAFKA_CONNECT_0_ADDRESS: "http://kafka-connect:8083"
+      KAFKA_CLUSTERS_0_KAFKA_CONNECT_1_NAME: "postgres-sink"
+      KAFKA_CLUSTERS_0_KAFKA_CONNECT_1_ADDRESS: "http://kafka-connect-sink:8084"
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - schema-registry
+      - kafka-connect
+      - kafka-connect-sink
+
+  kafka-connect:
+    image: milabuda544/kafka-reddit-connector:latest
+    volumes:
+      - ./config:/kafka-connect-source-reddit/config
+      - ./kafka-data/offsets:/kafka-connect-source-reddit/offsets
+      - ./kafka-data/logs:/kafka-connect-source-reddit/logs
+    ports:
+      - "5005:5005"
+      - "8083:8083"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: "kraft-cluster"
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - schema-registry
+
+  redis:
+    image: redis:8.0-M02
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: developmentpassword
+      POSTGRES_DB: subreddit-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  kafka-connect-sink:
+    image: confluentinc/cp-kafka-connect-jdbc:latest
+    container_name: kafka-connect-sink
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_CLUSTERS_0_NAME: "kraft-cluster"
+      CONNECT_BOOTSTRAP_SERVERS: "kafka1:29092,kafka2:29092,kafka3:29092"
+      CONNECT_REST_PORT: "8083"
+      CONNECT_GROUP_ID: "connect-cluster"
+      CONNECT_CONFIG_STORAGE_TOPIC: "connect-configs"
+      CONNECT_OFFSET_STORAGE_TOPIC: "connect-offsets"
+      CONNECT_STATUS_STORAGE_TOPIC: "connect-status"
+      CONNECT_KEY_CONVERTER: "io.confluent.connect.avro.AvroConverter"
+      CONNECT_VALUE_CONVERTER: "io.confluent.connect.avro.AvroConverter"
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONNECT_KEY_CONVERTER_AVRO_COMPATIBILITY: "FULL"
+      CONNECT_VALUE_CONVERTER_AVRO_COMPATIBILITY: "FULL"
+
+      CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-sink"
+    ports:
+    - "8084:8083"
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - postgres
+      - kafka-connect
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - postgres
+
+  init-kafka:
+    image: curlimages/curl:latest
+    container_name: init-kafka
+    volumes:
+      - ./init-scripts:/init-scripts
+    entrypoint: [ "/bin/sh", "/init-scripts/init.sh" ]
+    depends_on:
+      - schema-registry
+      - kafka-connect-sink
+      - kafka-connect
+
